@@ -1,0 +1,207 @@
+using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
+
+public class PrayingRitual : MonoBehaviour
+{
+    [Header("UI References")]
+    public RectTransform indicator;
+    public RectTransform targetZone;
+    public RectTransform calibrationBar;
+    public GameObject uiCanvas;
+
+    [Header("Game Objects")]
+    public Transform playerCamera;
+    public GameObject[] litCandles;   
+    public GameObject[] unlitCandles; 
+    public Transform[] altarTargets; 
+
+    [Header("Game Rules")]
+    public int targetSuccesses = 4;      
+    [Range(0.1f, 1f)]
+    public float shrinkFactor = 0.9f;    
+
+    [Header("Settings")]
+    public float indicatorSpeed = 500f;
+    public float bowAngle = 60f;
+    public float bowDuration = 1.5f;
+    public float flyDuration = 2.0f;
+    
+    [Header("Calibration")]
+    [Range(0, 50)] 
+    public float hitPadding = 15f; 
+
+    private bool isPlaying = true;
+    private bool movingRight = true;
+    private int successCount = 0;
+    private float barWidth;
+    private Vector3 originalCamRot;
+
+    void Start()
+    {
+        Application.targetFrameRate = 60; // Khóa FPS cho mượt
+        originalCamRot = playerCamera.localEulerAngles;
+        barWidth = calibrationBar.rect.width;
+        
+        SetCandlesState(true);
+    }
+
+    void Update()
+    {
+        if (!isPlaying) return;
+
+        MoveIndicator();
+
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            CheckTiming();
+        }
+    }
+
+    void MoveIndicator()
+    {
+        float speed = indicatorSpeed * Time.deltaTime;
+        Vector2 pos = indicator.anchoredPosition;
+        if (movingRight)
+        {
+            pos.x += speed;
+            if (pos.x > barWidth / 2) movingRight = false;
+        }
+        else
+        {
+            pos.x -= speed;
+            if (pos.x < -barWidth / 2) movingRight = true;
+        }
+        indicator.anchoredPosition = pos;
+    }
+
+    void CheckTiming()
+    {
+        float dist = Mathf.Abs(indicator.anchoredPosition.x - targetZone.anchoredPosition.x);
+        float hitThreshold = (targetZone.rect.width / 2) + hitPadding;
+
+        if (dist <= hitThreshold)
+        {
+            Debug.Log($"<color=green>THÀNH CÔNG! ({successCount + 1}/{targetSuccesses})</color>");
+            StartCoroutine(SuccessSequence());
+        }
+        else
+        {
+            Debug.Log($"<color=red>THẤT BẠI!</color>");
+            StartCoroutine(FailSequence());
+        }
+    }
+
+    void SetCandlesState(bool isLit)
+    {
+        foreach (GameObject candle in litCandles) if(candle) candle.SetActive(isLit);
+        foreach (GameObject candle in unlitCandles) if(candle) candle.SetActive(!isLit);
+    }
+
+    IEnumerator SuccessSequence()
+    {
+        isPlaying = false;
+        successCount++;
+
+        // Animation Cúi lạy
+        yield return StartCoroutine(BowAnimation());
+
+        // Kiểm tra điều kiện thắng (Dùng biến targetSuccesses thay vì số cứng)
+        if (successCount >= targetSuccesses)
+        {
+            StartCoroutine(WinGameSequence());
+        }
+        else
+        {
+            // Thu hẹp vùng đỏ 10% (nhân với 0.9)
+            Vector2 size = targetZone.sizeDelta;
+            size.x *= shrinkFactor;
+            targetZone.sizeDelta = size;
+            
+            // Tăng tốc độ nhẹ
+            indicatorSpeed *= 1.05f; 
+            
+            isPlaying = true;
+        }
+    }
+
+    IEnumerator FailSequence()
+    {
+        isPlaying = false;
+        yield return StartCoroutine(BowAnimation());
+        SetCandlesState(false);
+        uiCanvas.SetActive(false);
+    }
+
+    IEnumerator BowAnimation()
+    {
+        float elapsed = 0;
+        Quaternion startRot = playerCamera.localRotation;
+        Quaternion targetRot = Quaternion.Euler(originalCamRot.x + bowAngle, originalCamRot.y, originalCamRot.z);
+
+        while (elapsed < bowDuration / 2)
+        {
+            playerCamera.localRotation = Quaternion.Slerp(startRot, targetRot, elapsed / (bowDuration / 2));
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        elapsed = 0;
+        while (elapsed < bowDuration / 2)
+        {
+            playerCamera.localRotation = Quaternion.Slerp(targetRot, startRot, elapsed / (bowDuration / 2));
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        playerCamera.localRotation = startRot;
+    }
+
+    IEnumerator WinGameSequence()
+    {
+        Debug.Log("Hoàn thành nghi thức!");
+        uiCanvas.SetActive(false);
+
+        int count = litCandles.Length;
+        Vector3[] startPositions = new Vector3[count];
+        Quaternion[] startRotations = new Quaternion[count];
+        
+    
+        Quaternion finalRotation = Quaternion.Euler(90, 0, 0); 
+        // ---------------------------
+
+        for (int i = 0; i < count; i++)
+        {
+            if (litCandles[i] != null)
+            {
+                litCandles[i].transform.SetParent(null);
+                startPositions[i] = litCandles[i].transform.position;
+                startRotations[i] = litCandles[i].transform.rotation;
+            }
+        }
+
+        float elapsed = 0;
+        while (elapsed < flyDuration)
+        {
+            float t = elapsed / flyDuration;
+            for (int i = 0; i < count; i++)
+            {
+                if (litCandles[i] != null && i < altarTargets.Length && altarTargets[i] != null)
+                {
+                    litCandles[i].transform.position = Vector3.Lerp(startPositions[i], altarTargets[i].position, t);
+                    litCandles[i].transform.rotation = Quaternion.Lerp(startRotations[i], finalRotation, t);
+                }
+            }
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        
+        for (int i = 0; i < count; i++)
+        {
+            if (litCandles[i] != null && i < altarTargets.Length && altarTargets[i] != null)
+            {
+                litCandles[i].transform.position = altarTargets[i].position;
+                litCandles[i].transform.rotation = finalRotation;
+            }
+        }
+    }
+}
