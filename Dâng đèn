@@ -172,7 +172,7 @@ namespace LeGiaTien.RitualGame
             Vector3[] startPositions = new Vector3[count];
             Quaternion[] startRotations = new Quaternion[count];
             
-            Quaternion finalRotation = Quaternion.Euler(0, 0, 0); 
+            Quaternion finalRotation = Quaternion.Euler(90, 0, 0); 
 
             for (int i = 0; i < count; i++)
             {
